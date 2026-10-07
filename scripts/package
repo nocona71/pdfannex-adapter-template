@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Packages the fixture skeleton package into CTAN and TDS archives. New
+# adapters should rename the file list below to match their own package name.
+root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+stage="$(mktemp -d)"
+trap 'rm -rf -- "$stage"' EXIT
+
+mkdir -p "$stage/ctan"
+cp "$root/build.lua" \
+  "$root/pdfannex-fixture.sty" \
+  "$root/pdfannex-resolver-fixture" \
+  "$root/adapter-lib.lua" \
+  "$stage/"
+cp "$root/ctan/LICENSE" \
+  "$root/ctan/README.md" \
+  "$root/ctan/pdfannex-fixture-doc.tex" \
+  "$root/ctan/pdfannex-resolver-fixture.1" \
+  "$stage/ctan/"
+
+(
+  cd "$stage"
+  l3build ctan
+)
+
+cp "$stage/pdfannex-fixture-ctan.zip" "$root/"
+mkdir -p "$root/build/distrib/tds"
+cp "$stage/build/distrib/tds/pdfannex-fixture.tds.zip" \
+  "$root/build/distrib/tds/"
+cp -p "$root/scripts/install-texmfhome-tds.sh" \
+  "$root/build/distrib/tds/"

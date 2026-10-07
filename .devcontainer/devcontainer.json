@@ -1,0 +1,36 @@
+{
+  "name": "pdfannex-adapter-template Development",
+  "dockerComposeFile": "compose.yml",
+  "service": "dev",
+  "runServices": [
+    "dev"
+  ],
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {}
+  },
+  "workspaceFolder": "/workspace/pdfannex-adapter-template",
+  "mounts": [
+    "source=pdfannex-adapter-template-bash-history,target=/home/vscode/.bash-history,type=volume",
+    "source=pdfannex-adapter-template-vscode-user-data,target=/home/vscode/.vscode-server/data/User,type=volume",
+    "source=pdfannex-adapter-template-copilot-sessions,target=/home/vscode/.vscode-server/data/agentSessionData,type=volume",
+    "source=pdfannex-adapter-template-copilot-chats,target=/home/vscode/.copilot/chats,type=volume",
+    "source=pdfannex-adapter-template-copilot-session-state,target=/home/vscode/.copilot/session-state,type=volume",
+    "source=pdfannex-adapter-template-gh-config,target=/home/vscode/.config/gh,type=volume",
+    "source=pdfannex-adapter-template-ssh,target=/home/vscode/.ssh,type=volume"
+  ],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "James-Yu.latex-workshop",
+        "donjayamanne.githistory",
+        "mhutchie.git-graph"
+      ]
+    }
+  },
+  "remoteUser": "vscode",
+  "postCreateCommand": "sudo chown -R vscode:vscode /home/vscode/.config/gh /home/vscode/.ssh && chmod 700 /home/vscode/.config/gh /home/vscode/.ssh && make test-fast",
+  "remoteEnv": {
+    "HISTFILE": "/home/vscode/.bash-history/history"
+  }
+}

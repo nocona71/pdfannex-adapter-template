@@ -1,0 +1,52 @@
+\documentclass{article}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{hyperref}
+
+\title{The \texttt{pdfannex-fixture} skeleton adapter}
+\author{pdfannex-adapter-template contributors}
+\date{Version 0.1.0} % # x-release-please-version
+
+\begin{document}
+\maketitle
+
+\section{Purpose}
+
+\texttt{pdfannex-fixture} adds a command for documents served by a plain
+local directory tree. It is distributed separately from the core
+\texttt{pdfannex} package. The core package does not access the network or
+know about this adapter.
+
+This is a minimal skeleton adapter shipped with
+\href{https://github.com/nocona71/pdfannex-adapter-template}
+{\texttt{pdfannex-adapter-template}} so that the template is runnable and
+testable end to end. \textbf{It is not a production service adapter.} It has
+no network access, authentication or fault injection. Start a new adapter by
+copying the template and replacing the resolver's service-specific
+functions with calls to your real service's API.
+
+\section{Requirements}
+
+Use \texttt{pdfannex} dated 2026/05/01 or later and \texttt{texlua}, provided
+by TeX Live. The resolver runs only during explicit CLI operations, never
+while compiling.
+
+\section{Use}
+
+\begin{verbatim}
+\usepackage{pdfannex-fixture}
+...
+\includedoc[label=memo]{memo}{Project memo}
+\end{verbatim}
+
+Set \texttt{PDFANNEX\_FIXTURE\_ROOT} to a directory containing
+\texttt{<id>/<rev>.pdf} files. Without \texttt{rev}, the resolver pins the
+latest revision during \texttt{pdfannex prepare}.
+
+\section{See also}
+
+The \href{https://github.com/nocona71/pdfannex-adapter-template}{template
+repository} documents the full Resolver Protocol 1, the conformance check,
+and the test/packaging harness this adapter exercises.
+
+\end{document}

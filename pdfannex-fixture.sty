@@ -1,0 +1,14 @@
+% Companion package for the fixture skeleton resolver. THIS IS A SKELETON FOR
+% THE TEMPLATE'S SELF-TESTS, NOT A REAL ADAPTER: replace "fixture" and this
+% file's content with your service's name once you start a new adapter from
+% this template.
+\ProvidesPackage{pdfannex-fixture}[2025/01/01 v0.1.0 Fixture skeleton adapter for pdfannex]
+\RequirePackage{pdfannex}[2026/05/01]
+\makeatletter
+\@ifundefined{NewAnnexSource}
+  {\PackageError{pdfannex-fixture}
+     {pdfannex 0.2.0 or later is required}
+     {Update pdfannex to a release dated 2026/05/01 or later.}}
+  {\NewAnnexSource{\includedoc}{fixture}}
+\makeatother
+\endinput

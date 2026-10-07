@@ -1,0 +1,117 @@
+name: CTAN archive end-to-end test
+
+# Installs the fixture adapter's CTAN/TDS archives into a fresh Ubuntu
+# container with only the TeX Live packages a user would have, alongside the
+# core pdfannex archives, and builds documents with the combination. New
+# adapters created from this template should keep this workflow and only
+# rename the package identifiers below.
+on:
+  workflow_call:
+    inputs:
+      release_tag:
+        description: Release tag whose adapter archive to test; ignored when artifact is set
+        required: false
+        default: ""
+        type: string
+      artifact:
+        description: Name of a workflow artifact containing the adapter CTAN archive built earlier
+        required: false
+        default: ""
+        type: string
+      tds_artifact:
+        description: Name of a workflow artifact containing the adapter TDS archive built earlier
+        required: false
+        default: ""
+        type: string
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Release tag whose adapter archive to test (for example pdfannex-adapter-template-v1.0.0)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout adapter template
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.release_tag || github.sha }}
+
+      - name: Get adapter CTAN archive from earlier job
+        if: inputs.artifact != ''
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ inputs.artifact }}
+          path: archive/adapter
+
+      - name: Get adapter CTAN archive from release
+        if: inputs.artifact == ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          mkdir -p archive/adapter
+          gh release download "$RELEASE_TAG" --pattern 'pdfannex-fixture-ctan-v*.zip' --dir archive/adapter
+
+      - name: Get adapter TDS archive from earlier job
+        if: inputs.tds_artifact != ''
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ inputs.tds_artifact }}
+          path: tds/adapter
+
+      - name: Install TeX tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            make texlive-extra-utils texlive-fonts-recommended texlive-latex-base \
+            texlive-latex-extra texlive-luatex texlive-xetex
+
+      - name: Fetch verified pinned core release
+        run: |
+          make core-dependency
+          python3 - <<'PY'
+          from pathlib import Path
+          import shutil
+          from core_dependency import CTAN_ARCHIVE, TDS_ARCHIVE
+          Path("archive/core").mkdir(parents=True, exist_ok=True)
+          Path("tds/core").mkdir(parents=True, exist_ok=True)
+          shutil.copy2(CTAN_ARCHIVE, "archive/core/pdfannex-ctan.zip")
+          shutil.copy2(TDS_ARCHIVE, "tds/core/pdfannex.tds.zip")
+          PY
+
+      - name: Build adapter TDS archive when not supplied
+        if: inputs.tds_artifact == ''
+        run: |
+          make package
+          mkdir -p tds/adapter
+          cp build/distrib/tds/pdfannex-fixture.tds.zip tds/adapter/
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build clean TeX image (layers cached between runs)
+        uses: docker/build-push-action@v6
+        with:
+          context: .github/e2e
+          load: true
+          tags: pdfannex-adapter-template-e2e:clean
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Test adapter and its core dependency in a fresh container
+        run: |
+          docker run --rm -v "$PWD:/w:ro" pdfannex-adapter-template-e2e:clean bash -euxo pipefail -c '
+            python3 /w/e2e_ctan.py \
+              /w/archive/core/pdfannex-ctan.zip \
+              /w/archive/adapter/pdfannex-fixture-ctan*.zip
+            python3 /w/texlive_e2e.py \
+              /w/tds/core/pdfannex.tds.zip \
+              /w/tds/adapter/pdfannex-fixture.tds.zip
+          '

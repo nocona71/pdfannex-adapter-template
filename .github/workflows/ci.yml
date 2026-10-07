@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout adapter template
+        uses: actions/checkout@v6
+
+      - name: Install test tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            curl make poppler-utils python3 shellcheck texlive-extra-utils texlive-fonts-recommended \
+            texlive-latex-base texlive-latex-extra texlive-luatex
+
+      - name: Test fixture adapter and harness
+        uses: ./.github/actions/test
+
+      - name: Build CTAN archive
+        run: make package
+
+      - name: Upload CTAN archive
+        uses: actions/upload-artifact@v7
+        with:
+          name: fixture-adapter-ctan-archive
+          path: pdfannex-fixture-ctan.zip
+          if-no-files-found: error
+
+      - name: Upload TDS archive
+        uses: actions/upload-artifact@v7
+        with:
+          name: fixture-adapter-tds-archive
+          path: |
+            build/distrib/tds/pdfannex-fixture.tds.zip
+            build/distrib/tds/install-texmfhome-tds.sh
+          if-no-files-found: error
+
+  ctan-e2e:
+    needs: check
+    uses: ./.github/workflows/ctan-e2e.yml
+    with:
+      artifact: fixture-adapter-ctan-archive
+      tds_artifact: fixture-adapter-tds-archive

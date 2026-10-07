@@ -1,0 +1,12 @@
+name: Test pdfannex adapter
+description: Run adapter tests against the pinned pdfannex release
+runs:
+  using: composite
+  steps:
+    - name: Run adapter tests
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        cd "$ACTION_PATH/../../.."
+        make test

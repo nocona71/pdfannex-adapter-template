@@ -1,0 +1,16 @@
+*.aux
+*.log
+*.out
+*.toc
+*.loa
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+build/
+/pdfannex-fixture-ctan.zip
+/ctan/pdfannex-fixture-doc.pdf
+missfont.log
+.DS_Store
+*.xdv
+.env
+__pycache__/

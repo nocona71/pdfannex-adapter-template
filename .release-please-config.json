@@ -1,0 +1,15 @@
+{
+  "packages": {
+    ".": {
+      "release-type": "simple",
+      "package-name": "pdfannex-adapter-template",
+      "include-v-in-tag": true,
+      "bump-minor-pre-major": true,
+      "extra-files": [
+        "VERSION",
+        "pdfannex-fixture.sty",
+        "ctan/pdfannex-fixture-doc.tex"
+      ]
+    }
+  }
+}

@@ -1,0 +1,172 @@
+#!/usr/bin/env texlua
+-- Minimal Resolver Protocol 1 implementation (spec/08) and fork-start for new
+-- adapters.
+--
+-- THIS IS A SKELETON, NOT A REAL SERVICE ADAPTER. It serves
+-- pdfannex://fixture/<id>[?rev=<n>] from a plain local directory tree
+-- (PDFANNEX_FIXTURE_ROOT/<id>/<rev>.pdf) instead of a real network service, so
+-- the template is runnable and testable without any third-party dependency.
+-- Replace `parse_source`, `fetch_latest` and `fetch_revision` with calls to
+-- your real service's API; everything else (the bottom of this file) is
+-- protocol plumbing that most adapters can reuse unchanged.
+--
+-- Configuration comes from the environment, never from the document or the
+-- lock file:
+--   PDFANNEX_FIXTURE_ROOT  directory holding <id>/<rev>.pdf files (required)
+--
+-- Without rev the latest revision is chosen and pinned in the resolved
+-- locator, which is what the lock file records. Hashing and storage belong to
+-- the pdfannex CLI, not the adapter.
+local script_dir = (arg[0] or ""):match("^(.*)/[^/]*$") or "."
+local support = script_dir
+local file = io.open(support .. "/adapter-lib.lua", "r")
+if file then
+  file:close()
+else
+  kpse.set_program_name("latex")
+  local found = kpse.find_file("adapter-lib.lua", "texmfscripts")
+  if found then support = found:match("^(.*)/[^/]+$") or support end
+end
+package.path = support .. "/?.lua;" .. package.path
+local lib = require("adapter-lib")
+
+local VERSION = "0.1.0"
+local SCHEME = "fixture"
+
+local function reply(obj) io.stdout:write(lib.json_encode(obj), "\n") end
+local function fail(id, code, message) return { id = id, error = { code = code, message = message } } end
+
+-- Pure parsing of the source URI: returns { id, rev } (rev may be nil) or
+-- nil, code, message. Replace the scheme-specific id/option rules here; keep
+-- returning the same shape so the rest of the file does not need to change.
+local function parse_source(source)
+  local id, query = source:match("^pdfannex://" .. SCHEME .. "/([^?]*)%??(.*)$")
+  if not id or #id > 64 or not id:match("^[%w_%-]+$") then
+    return nil, "invalid-source", "expected pdfannex://" .. SCHEME .. "/<id>"
+  end
+  local rev
+  for key, value in query:gmatch("([^&=]+)=?([^&]*)") do
+    if key ~= "rev" or rev or not value:match("^[1-9]%d?%d?%d?%d?%d?%d?%d?%d?$") then
+      return nil, "unsupported-source-option", "unsupported or repeated option: " .. key .. "=" .. value
+    end
+    rev = value
+  end
+  return { id = id, rev = rev }
+end
+
+-- "Service API": replace with your real lookup (HTTP call, SDK, etc). Returns
+-- the latest revision number as a string, or nil, code, message.
+local function fetch_latest(id)
+  local root = os.getenv("PDFANNEX_FIXTURE_ROOT")
+  if not root or root == "" then
+    return nil, "temporarily-unavailable", "PDFANNEX_FIXTURE_ROOT is not set"
+  end
+  local best
+  local dir = root .. "/" .. id
+  local p = io.popen("ls -1 '" .. dir:gsub("'", "'\\''") .. "' 2>/dev/null")
+  if p then
+    for name in p:lines() do
+      local rev = name:match("^(%d+)%.pdf$")
+      if rev and (not best or tonumber(rev) > tonumber(best)) then best = rev end
+    end
+    p:close()
+  end
+  if not best then
+    return nil, "resource-not-found", "no such document: " .. id
+  end
+  return best
+end
+
+-- "Service API": replace with your real download. Returns the path to a file
+-- containing the revision's bytes (a temporary copy is fine; the CLI reads it
+-- once), or nil, code, message.
+local function fetch_revision(id, rev)
+  local root = os.getenv("PDFANNEX_FIXTURE_ROOT")
+  if not root or root == "" then
+    return nil, "temporarily-unavailable", "PDFANNEX_FIXTURE_ROOT is not set"
+  end
+  local source = root .. "/" .. id .. "/" .. rev .. ".pdf"
+  local data = lib.read_file(source)
+  if not data then
+    return nil, "resource-not-found", "no such revision: " .. id .. "?rev=" .. rev
+  end
+  local copy = os.tmpname()
+  local ok = lib.write_file(copy, data)
+  if not ok then
+    return nil, "temporarily-unavailable", "could not stage a local copy of " .. source
+  end
+  return copy
+end
+
+local function resolve_one(req)
+  local src, code, message = parse_source(req.source or "")
+  if not src then return fail(req.id, code, message) end
+  local rev = src.rev
+  if not rev then
+    rev, code, message = fetch_latest(src.id)
+    if not rev then return fail(req.id, code, message) end
+  end
+  local file
+  file, code, message = fetch_revision(src.id, rev)
+  if not file then return fail(req.id, code, message) end
+  return { id = req.id, resolved = "pdfannex://" .. SCHEME .. "/" .. src.id .. "?rev=" .. rev,
+           artifact = { path = file } }
+end
+
+-- The locked revision is the one in req.resolved. It must still exist, and its
+-- bytes must still match the lock; otherwise it was changed since locking. A
+-- newer revision means update-available (unless the source pins a revision).
+local function status_one(req)
+  local src, code, message = parse_source(req.source or "")
+  if not src then return fail(req.id, code, message) end
+  local locked = (req.resolved or ""):match("^pdfannex://" .. SCHEME .. "/[%w_%-]+%?rev=([1-9]%d*)$")
+  local latest
+  latest, code, message = fetch_latest(src.id)
+  if not latest then return fail(req.id, code, message) end
+  if not locked then return { id = req.id, state = "unknown" } end
+  local file
+  file, code, message = fetch_revision(src.id, locked)
+  if not file then return fail(req.id, code, message) end
+  local data = lib.read_file(file)
+  os.remove(file)
+  if req.lockedSha256 and lib.sha256_hex(data or "") ~= req.lockedSha256 then
+    return { id = req.id, state = "update-available" }
+  end
+  local newer = not src.rev and tonumber(locked) < tonumber(latest)
+  return { id = req.id, state = newer and "update-available" or "up-to-date" }
+end
+
+-- ---------------------------------------------------------------------------
+-- Protocol plumbing below this line is independent of the fixture/service
+-- logic above and can usually be reused unchanged by a new adapter.
+-- ---------------------------------------------------------------------------
+
+local ok, request = pcall(lib.json_decode, io.stdin:read("a"))
+if not ok or type(request) ~= "table" then
+  io.stderr:write("pdfannex-resolver-" .. SCHEME .. ": malformed request\n")
+  reply({ error = { code = "malformed-request", message = "stdin is not a JSON object" } })
+  os.exit(1)
+end
+
+local op = request.operation
+if op == "describe" then
+  reply({ resolver = { name = SCHEME, version = VERSION }, protocolVersions = { 1 },
+          schemes = { SCHEME }, capabilities = { "resolve", "status" } })
+elseif op == "resolve" or op == "status" then
+  if request.protocolVersion ~= 1 then
+    reply({ error = { code = "unsupported-protocol", message = "only protocol version 1 is supported" } })
+    os.exit(1)
+  end
+  if type(request.requests) ~= "table" then
+    reply({ error = { code = "invalid-request", message = "requests must be an array" } })
+    os.exit(1)
+  end
+  local results = {}
+  for i, req in ipairs(request.requests) do
+    results[i] = (op == "resolve" and resolve_one or status_one)(req)
+  end
+  reply({ protocolVersion = 1, results = results })
+else
+  reply({ error = { code = "invalid-request", message = "unknown operation: " .. tostring(op) } })
+  os.exit(1)
+end

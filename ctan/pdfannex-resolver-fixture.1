@@ -1,0 +1,32 @@
+.TH PDFANNEX-RESOLVER-FIXTURE 1
+.SH NAME
+pdfannex-resolver-fixture \- resolve pdfannex sources from a local fixture directory
+.SH SYNOPSIS
+.B pdfannex-resolver-fixture
+.SH DESCRIPTION
+.B pdfannex-resolver-fixture
+implements Resolver Protocol 1 for the
+.B fixture
+scheme. It reads one JSON request from standard input and writes a JSON
+response to standard output. It is normally invoked by the
+.B pdfannex
+CLI.
+This is a minimal skeleton adapter shipped with the pdfannex-adapter-template
+repository so that the template is runnable and testable; it is not a
+production service adapter. It serves documents from a plain local directory
+tree instead of a real network service.
+.SH CONFIGURATION
+.TP
+.B PDFANNEX_FIXTURE_ROOT
+Required directory containing
+.IR id / rev .pdf
+files, for example
+.IR PDFANNEX_FIXTURE_ROOT /memo/2.pdf .
+.SH REQUIREMENTS
+Requires
+.BR texlua (1).
+.SH SECURITY
+The resolver does not access the network and reads only from the configured
+root directory.
+.SH SEE ALSO
+.BR pdfannex (1)
